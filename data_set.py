@@ -36,8 +36,7 @@ class DataSet:
         
         rand_idx = np.random.randint(0, self._length - 1, nums)
         close = np.array([self._history_data['close'].iloc[self.obs_buffer[x].index] for x in rand_idx])
-# Debug
-        print('obs_src:\n', close)
+
         obs = np.vstack([self.obs_buffer[x].values(
             self._history_data, self._hps.days) for x in rand_idx])
         price_next_day = np.array([self._history_data['close'].iloc[self.obs_buffer[x].index-49]

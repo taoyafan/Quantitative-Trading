@@ -77,10 +77,11 @@ class Observations:
 def calc_reward_batch(obs, next_obs, history_data):
     # obs 和 next_obs 为 Observation 类
     
-    fee = obs.trade_price * 0.02 if next_obs.wait_time == 1 else 0
+    fee = next_obs.trade_price * 0.02 if next_obs.wait_time == 1 else 0
     if obs.is_hold == 1:
-        delta_price = (next_obs.decode(history_data, 1).close.iloc[0]
-                       - obs.decode(history_data, 1).close.iloc[0]) * 100
+        delta_price = (history_data['close'].iloc[next_obs.index]
+                       - history_data['close'].iloc[obs.index]) * 100
+ 
         return delta_price - fee
     else:
         return -fee

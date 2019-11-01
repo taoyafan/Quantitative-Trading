@@ -187,15 +187,15 @@ def main():
     data_size = 100
     for i in range(data_size):
         print('\r{}/{}'.format(i, data_size), end='')
-        obs, _, _ = env.step(obs, Actions([0.3, 0.3, 0.4]))
+        obs, reward, _ = env.step(obs, Actions([0.3, 0.3, 0.4]))
         data_set.add_data(obs, 0, 0)
 
     print("[finished in {:.2f} s]".format(time.time() - start))
-    n = 100
-    for i in range(n):
-        print('\n\n{}/{}'.format(i, n))
-        model.price_train(1, data_set)
-    return
+    # n = 100
+    # for i in range(n):
+    #     print('\n\n{}/{}'.format(i, n))
+    #     model.price_train(1, data_set)
+    # return
 
 
 if __name__ == '__main__':
