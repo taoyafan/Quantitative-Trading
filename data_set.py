@@ -1,10 +1,57 @@
-import os
+import pandas as pd
+import numpy as np
 
 
-if os.path.exists('601318.SH_5min.csv'):
-    data = pd.read_csv('601318.SH_5min.csv', index_col=0)
-    print('Read sussessful')
-#     print('head: \n', data.head())
-#     print('tail: \n', data.tail())
-else:
-    print('File not exist')
+class DataSet:
+    def __init__(self, hps, data_dir='601318.SH_5min.csv'):
+        self.obs_buffer = []
+        self.action_buffer = []
+        self.reward_buffer = []
+        
+        self._length = 0
+        self._hps = hps
+        self._history_data = pd.read_csv(data_dir, index_col=0)
+        return
+    
+    def get_batch(self, nums):
+        assert self._length > 1, 'Length of data is {} which is not enough. \
+        Data need at least {}'.format(self._length, 2)
+        
+        rand_idx = np.random.randint(0, self._length - 1, nums)
+        obs = np.vstack([self.obs_buffer[x].values(
+            self._history_data, self._hps.days) for x in rand_idx])
+        
+        next_obs = np.vstack([self.obs_buffer[x + 1].values(
+            self._history_data, self._hps.days) for x in rand_idx])
+        
+        rewards = [self.reward_buffer[x] for x in rand_idx]
+        
+        actions = [self.action_buffer[x] for x in rand_idx]
+        
+        return obs, next_obs, rewards, actions
+    
+    def get_price_batch(self, nums):
+        assert 1 < self._length < self._history_data.shape[0]-49, 'Length of data is {} which is not enough. \
+        Data need at least {}'.format(self._length, 2)
+        
+        rand_idx = np.random.randint(0, self._length - 1, nums)
+        close = np.array([self._history_data['close'].iloc[self.obs_buffer[x].index] for x in rand_idx])
+# Debug
+        print('obs_src:\n', close)
+        obs = np.vstack([self.obs_buffer[x].values(
+            self._history_data, self._hps.days) for x in rand_idx])
+        price_next_day = np.array([self._history_data['close'].iloc[self.obs_buffer[x].index-49]
+                                   for x in rand_idx])
+        return obs, price_next_day
+    
+    def add_data(self, obs, action, reward):
+        # obs 为 Observation 类
+        self.obs_buffer.append(obs)
+        self.action_buffer.append(action)
+        self.reward_buffer.append(reward)
+        self._length += 1
+        return
+
+    @property
+    def history_data(self):
+        return self._history_data

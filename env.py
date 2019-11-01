@@ -9,7 +9,6 @@ def get_time(t):
 
 
 class Actions:
-    
     def __init__(self, action_prob):
         # 买、卖、持有的几率
         self.p_buy = action_prob[0]
@@ -18,8 +17,8 @@ class Actions:
         
         self.action_choose = np.random.choice(['buy', 'sell', 'hold'],
                                               p=[self.p_buy, self.p_sell, self.p_hold])
-        # Deubg
-        print('action_prob: {}, action is {}'.format(action_prob, self.action_choose))
+# Deubg
+#         print('action_prob: {}, action is {}'.format(action_prob, self.action_choose))
     
     def choose(self):
         return self.action_choose
@@ -51,14 +50,15 @@ class Observations:
                           np.array([[self.is_hold * 100, 100 if is_pass_night else 0, self.trade_price]])])
     
     def decode(self, history_data, length, log=False):
-        recent_data = history_data[['trade_time', 'open', 'high', 'low', 'close', 'vol']][
+        recent_data = history_data[['trade_time', 'open', 'high', 'low', 'close', 'vol']].iloc[
                       self.index: self.index + length]
-        recent_data['trade_time'] = recent_data['trade_time'].apply(lambda x: get_time(x))
         
+        recent_data['trade_time'] = recent_data['trade_time'].apply(lambda x: get_time(x))
+
         if log:
             print('recent data is :\n', recent_data)
             print('')
-            
+
             if self.is_hold:
                 print('Hold stock for {} minutes， purchase price is {}.'.format(
                     self.wait_time * 5, self.trade_price))
@@ -87,9 +87,9 @@ def calc_reward_batch(obs, next_obs, history_data):
 
 
 class Env:
-    def __init__(self, hps, history_data):
+    def __init__(self, hps, data_set):
         self._hps = hps
-        self._history_data = history_data
+        self._history_data = data_set.history_data
         
         self._observations_dim = hps.days * 6 + 3
         self._actions_dim = 3
@@ -123,7 +123,6 @@ class Env:
             pass  # 不做操作
         
         next_obs = Observations(index - 1, is_hold, wait_time + 1, trade_price)
-        
         return next_obs, calc_reward_batch(obs, next_obs, self._history_data), done
     
     @property
