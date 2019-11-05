@@ -11,6 +11,10 @@ class DataSet:
         self._length = 0
         self._hps = hps
         self._history_data = pd.read_csv(data_dir, index_col=0)
+
+        # max_min_scaler = lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))
+        # self._history_data[['open', 'high', 'low', 'close', 'vol']] = \
+        #     self._history_data[['open', 'high', 'low', 'close', 'vol']].apply(max_min_scaler)
         return
     
     def get_batch(self, nums):
@@ -36,12 +40,14 @@ class DataSet:
         
         rand_idx = np.random.randint(0, self._length - 1, nums)
         close = np.array([self._history_data['close'].iloc[self.obs_buffer[x].index] for x in rand_idx])
-
+# Debug
+#         print('close:\n', close)
         obs = np.vstack([self.obs_buffer[x].values(
             self._history_data, self._hps.days) for x in rand_idx])
-        price_next_day = np.array([self._history_data['close'].iloc[self.obs_buffer[x].index-49]
+        price_next_day = np.array([self._history_data['close'].iloc[self.obs_buffer[x].index-1]
                                    for x in rand_idx])
-        return obs, price_next_day
+        delta = price_next_day - close
+        return obs, delta
     
     def add_data(self, obs, action, reward):
         # obs 为 Observation 类

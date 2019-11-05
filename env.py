@@ -5,7 +5,7 @@ import numpy as np
 def get_time(t):
     time = datetime.datetime.strptime(t, '%Y-%m-%d %H:%M:%S')
     minus_9_30 = (int(time.strftime('%H')) - 9) * 12 + int(time.strftime('%M')) / 5 - 6
-    return minus_9_30 if minus_9_30 < 25 else minus_9_30 - 18
+    return (minus_9_30 if minus_9_30 < 25 else minus_9_30 - 18)/48
 
 
 class Actions:
@@ -37,17 +37,18 @@ class Observations:
     
     def values(self, history_data, length):
         # history_data: DataFram 索引越靠前日期越靠后
-        # 返回数据为 length * 6 + 3， 前 length * 6 为每日的 time，open， close， high， low， vol-10000
+        # 返回数据为 length * 6 + 3， 前 length * 6 为每日的 time，open， close， high， low， vol/10000
         # 其中 time 为 0 到 48， 表示一天中的第几个5分钟
         # 最后三位分别是 is_hold * 100，即100为持仓, 持仓是否过夜，100为过夜
         
         recent_data = history_data[['trade_time', 'open', 'high', 'low', 'close', 'vol']][
                       self.index: self.index + length]
-        recent_data['vol'] = recent_data['vol'] / 10000
+        recent_data['vol'] = recent_data['vol']/10000
         recent_data['trade_time'] = recent_data['trade_time'].apply(lambda x: get_time(x))
         is_pass_night = self.wait_time > 48 or self.wait_time > recent_data['trade_time'].iloc[0]
-        return np.hstack([np.array(recent_data.values).reshape(1, -1),
-                          np.array([[self.is_hold * 100, 100 if is_pass_night else 0, self.trade_price]])])
+        return np.array(recent_data.values).reshape(1, -1)
+        # return np.hstack([np.array(recent_data.values).reshape(1, -1),
+        #                   np.array([[self.is_hold * 100, 100 if is_pass_night else 0, self.trade_price]])])
     
     def decode(self, history_data, length, log=False):
         recent_data = history_data[['trade_time', 'open', 'high', 'low', 'close', 'vol']].iloc[
@@ -92,7 +93,7 @@ class Env:
         self._hps = hps
         self._history_data = data_set.history_data
         
-        self._observations_dim = hps.days * 6 + 3
+        self._observations_dim = hps.days * 6
         self._actions_dim = 3
         return
     

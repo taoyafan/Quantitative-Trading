@@ -6,6 +6,7 @@ import shutil
 from data_set import DataSet
 import time
 
+
 class Model:
     def __init__(self, hps, obs_dim, actions_dim):
         self._hps = hps
@@ -31,10 +32,15 @@ class Model:
     def price_train(self, iteration, data_set):
         for i in range(iteration):
             obs_ph, price_ph = data_set.get_price_batch(self._hps.batch_size)
-            print('obs_ph\n', obs_ph)
+            # print('obs_ph\n', obs_ph)
             price, price_loss, _ = self._sess.run([self.price_predict, self.price_loss, self.price_train_opt],
-                                                  {self._observations_ph: obs_ph, self._price_next_day_ph: price_ph})
+                                                  {self._observations_ph: (obs_ph-50)/100,
+                                                   self._price_next_day_ph: price_ph})
+            
             print('price_predict: \n {} \n target: \n {} \n price_loss : {}'.format(price, price_ph, price_loss))
+            err_rate = price * price_ph
+            err_rate = err_rate <= 0
+            print('Error rate : {}'.format(np.sum(err_rate) / err_rate.shape))
             
     def test(self, data):
         return
@@ -103,7 +109,7 @@ class Model:
     def _hidden_state_fun(self, state):
         with tf.variable_scope('hidden_state', reuse=tf.AUTO_REUSE):
             hidden_states = tf.layers.dense(state, self._hps.hidden_dim,
-                                            activation=tf.nn.sigmoid, name='state_hidden_layer')
+                                            activation=tf.nn.leaky_relu, name='state_hidden_layer')
         return hidden_states
     
     def _policy_fun(self, hidden_states):
@@ -166,12 +172,12 @@ class Model:
 
 def main():
     hps = {'trunc_norm_init_std': 1e-4,
-           'hidden_dim': 20,
+           'hidden_dim': 100,
            'train_dir': './model_test',
            'gamma': 0.99,
-           'learning_rate': 0.003,
-           'batch_size': 10,
-           'days': 20}
+           'learning_rate': 0.001,
+           'batch_size': 100,
+           'encode_step': 200}
     hps = namedtuple("HParams", hps.keys())(**hps)
     
     if os.path.exists(hps.train_dir):
@@ -184,18 +190,18 @@ def main():
     data_set.add_data(obs, 0, 0)
 
     start = time.time()
-    data_size = 100
+    data_size = 10000
     for i in range(data_size):
         print('\r{}/{}'.format(i, data_size), end='')
         obs, reward, _ = env.step(obs, Actions([0.3, 0.3, 0.4]))
         data_set.add_data(obs, 0, 0)
 
     print("[finished in {:.2f} s]".format(time.time() - start))
-    # n = 100
-    # for i in range(n):
-    #     print('\n\n{}/{}'.format(i, n))
-    #     model.price_train(1, data_set)
-    # return
+    n = 100
+    for i in range(n):
+        print('\n\n{}/{}'.format(i, n))
+        model.price_train(1, data_set)
+    return
 
 
 if __name__ == '__main__':
