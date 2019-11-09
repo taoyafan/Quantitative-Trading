@@ -9,6 +9,8 @@ def get_time(t):
 
 
 class Actions:
+    dim = 3
+    
     def __init__(self, action_prob):
         # 买、卖、持有的几率
         self.p_buy = action_prob[0]
@@ -102,15 +104,15 @@ class Env:
     def __init__(self, hps, data_set):
         self._hps = hps
         self._history_data = data_set.history_data
+        index = self._history_data.shape[0] - self._hps.encode_step - 1
+        self._reset_obs = Observations(index=index, is_hold=0, wait_time=0, trade_price=0)
         
-        self._observations_dim = hps.encode_step  # * hps.encode_dim + 3
-        self._actions_dim = 3
+        self._observations_dim = self._reset_obs.values(data_set.history_data, hps.encode_step).shape[1]
+        self._actions_dim = Actions.dim
         return
     
     def reset(self):
-        index = self._history_data.shape[0] - self._hps.encode_step - 1
-
-        return Observations(index=index, is_hold=0, wait_time=0, trade_price=0)
+        return self._reset_obs
     
     def step(self, obs, action):
         # 输入为 Observations 类和 Actions 类
