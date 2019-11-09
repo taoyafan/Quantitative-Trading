@@ -5,7 +5,7 @@ import numpy as np
 def get_time(t):
     time = datetime.datetime.strptime(t, '%Y-%m-%d %H:%M:%S')
     minus_9_30 = (int(time.strftime('%H')) - 9) * 12 + int(time.strftime('%M')) / 5 - 6
-    return (minus_9_30 if minus_9_30 < 25 else minus_9_30 - 18)/48
+    return minus_9_30 if minus_9_30 < 25 else minus_9_30 - 18
 
 
 class Actions:
@@ -40,13 +40,23 @@ class Observations:
         # 返回数据为 length * 6 + 3， 前 length * 6 为每日的 time，open， close， high， low， vol/10000
         # 其中 time 为 0 到 48， 表示一天中的第几个5分钟
         # 最后三位分别是 is_hold * 100，即100为持仓, 持仓是否过夜，100为过夜
-        
-        recent_data = history_data[['trade_time', 'open', 'high', 'low', 'close', 'vol']][
+        feature = ['close']
+        # feature = ['trade_time', 'open', 'high', 'low', 'close', 'vol']
+        recent_data = history_data[feature][
                       self.index: self.index + length]
-        recent_data['vol'] = recent_data['vol']/10000
-        recent_data['trade_time'] = recent_data['trade_time'].apply(lambda x: get_time(x))
-        is_pass_night = self.wait_time > 48 or self.wait_time > recent_data['trade_time'].iloc[0]
-        return np.array(recent_data.values).reshape(1, -1)
+        # recent_data['vol'] = recent_data['vol']/10000
+        # recent_data['trade_time'] = recent_data['trade_time'].apply(lambda x: get_time(x))
+        # is_pass_night = self.wait_time > 48 or self.wait_time > recent_data['trade_time'].iloc[0]
+        values = np.array(recent_data.values).reshape(1, -1)
+        # print('length: ', history_data.shape[0])
+        # print(self.index + length - 1)
+        # print(values)
+        # print('1: ', values[0][self.index])
+        # print('2: ', values[0][values[0][self.index + length - 1]])
+        for i in range(0, length):
+            values[0][i] = 100 * (values[0][i] - values[0][length - 1]) / values[0][length - 1]
+            
+        return values
         # return np.hstack([np.array(recent_data.values).reshape(1, -1),
         #                   np.array([[self.is_hold * 100, 100 if is_pass_night else 0, self.trade_price]])])
     
@@ -93,12 +103,13 @@ class Env:
         self._hps = hps
         self._history_data = data_set.history_data
         
-        self._observations_dim = hps.days * 6
+        self._observations_dim = hps.encode_step  # * hps.encode_dim + 3
         self._actions_dim = 3
         return
     
     def reset(self):
-        index = self._history_data.shape[0] - self._hps.days - 1
+        index = self._history_data.shape[0] - self._hps.encode_step - 1
+
         return Observations(index=index, is_hold=0, wait_time=0, trade_price=0)
     
     def step(self, obs, action):
@@ -135,3 +146,23 @@ class Env:
     def actions_dim(self):
         return self._actions_dim
 
+
+def main():
+    from data_set import DataSet
+    hps = {'enc_hidden_dim': 100,
+           'dec_hidden_dim': 100,
+           'train_dir': './model_test',
+           'gamma': 0.99,
+           'learning_rate': 0.003,
+           'batch_size': 30,
+           'encode_step': 60,  # 200 个历史数据
+           'encode_dim': 6}     # 时间，开，收，高，低，量
+    data_set = DataSet(hps)
+    obs = Observations(0, 0, 0, 0)
+    print(obs.values(data_set.history_data, 20))
+    return
+
+
+if __name__ == '__main__':
+    np.set_printoptions(2)
+    main()

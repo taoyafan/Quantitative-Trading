@@ -43,11 +43,14 @@ class DataSet:
 # Debug
 #         print('close:\n', close)
         obs = np.vstack([self.obs_buffer[x].values(
-            self._history_data, self._hps.days) for x in rand_idx])
+            self._history_data, self._hps.encode_step) for x in rand_idx])
         price_next_day = np.array([self._history_data['close'].iloc[self.obs_buffer[x].index-1]
                                    for x in rand_idx])
-        delta = price_next_day - close
-        return obs, delta
+        temp = price_next_day - close
+        up_down_prob = np.zeros([nums, 2])
+        up_down_prob[np.where(temp > 0), 0] = 1
+        up_down_prob[np.where(temp <= 0), 1] = 1
+        return obs, up_down_prob
     
     def add_data(self, obs, action, reward):
         # obs 为 Observation 类
