@@ -63,12 +63,12 @@ def variable_summaries(var_name, var):
     with tf.name_scope('summaries_{}'.format(var_name)):
         mean = tf.reduce_mean(var)
         tf.summary.scalar('mean', mean)
-        # with tf.name_scope('stddev'):
-        #   stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-        # tf.summary.scalar('stddev', stddev)
-        # tf.summary.scalar('max', tf.reduce_max(var))
-        # tf.summary.scalar('min', tf.reduce_min(var))
-        # tf.summary.histogram('histogram', var)
+        with tf.name_scope('stddev'):
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        tf.summary.scalar('stddev', stddev)
+        tf.summary.scalar('max', tf.reduce_max(var))
+        tf.summary.scalar('min', tf.reduce_min(var))
+        tf.summary.histogram('histogram', var)
         
         
 class Model:
@@ -97,28 +97,54 @@ class Model:
             print('action_loss: {}, Q_loss : {}'.format(action_loss, Q_loss))
         
         return
-    
+
+    def price_print(self, price, price_ph, price_loss, tf_accuracy, prefix, step):
+        predict_label = [[x[0], -0.3 < x[0] - x[1] < 0.3] for x in list(zip(price[:, 0], price_ph[:, 0]))
+                         if x[0] > 0.7 or x[0] < 0.3]
+        # print('price_ph: ', price_ph)
+        # print('price: ', price)
+        # print('predict_label: ', predict_label)
+        print(prefix+'loss: ', price_loss)
+        predict_label = np.array(predict_label)
+        high_confident_rate = 100 * len(predict_label) / len(price)
+        high_confident_acc = 100 * np.sum(predict_label[:, 1]) / len(predict_label) \
+            if len(predict_label) != 0 else 50
+        print(prefix+'High confident predict rate: {:.2f}%'.format(high_confident_rate))
+        print(prefix+'High confident predict accuracy: {:.2f}%'.format(high_confident_acc))
+        print(prefix+'Overall accuracy: {}'.format(tf_accuracy))
+
+        summary = tf.Summary()
+        summary.value.add(tag=prefix+'loss', simple_value=price_loss)
+        summary.value.add(tag=prefix+'high_confident_rate', simple_value=high_confident_rate)
+        summary.value.add(tag=prefix+'high_confident_acc', simple_value=high_confident_acc)
+        summary.value.add(tag=prefix+'overall_acc', simple_value=tf_accuracy)
+        self._summary_writer.add_summary(summary, step)
+        
+    def price_test(self, iteration, data_set):
+        for i in range(iteration):
+            obs_ph, price_ph = data_set.get_price_test_batch(self._hps.batch_size)
+            # obs_ph = (obs_ph - 50) / 100
+            # print('obs_ph\n', obs_ph)
+            to_return = [self.price_predict, self.price_loss, self.accuracy, self.global_step]
+            feed_dict = {self._observations_ph: obs_ph, self._price_up_down_prob_ph: price_ph,
+                         self._keep_prob_ph: 1}
+            price, price_loss, tf_accuracy, train_step = self._sess.run(to_return, feed_dict)
+            self.price_print(price, price_ph, price_loss, tf_accuracy, 'test_', train_step)
+            
     def price_train(self, iteration, data_set):
         for i in range(iteration):
             obs_ph, price_ph = data_set.get_price_batch(self._hps.batch_size)
+            keep_prob_ph = self._hps.keep_prob
             # obs_ph = (obs_ph - 50) / 100
             # print('obs_ph\n', obs_ph)
             to_return = [self.price_predict, self.price_loss, self.price_train_opt, self.summaries, self.global_step,
                          self.accuracy]
-            feed_dict = {self._observations_ph: obs_ph, self._price_up_down_prob_ph: price_ph}
+            feed_dict = {self._observations_ph: obs_ph, self._price_up_down_prob_ph: price_ph,
+                         self._keep_prob_ph: keep_prob_ph}
             price, price_loss, _, summaries, train_step, tf_accuracy = self._sess.run(to_return, feed_dict)
             
             self._summary_writer.add_summary(summaries, train_step)
-            predict_label = [[x[0], -0.2 < x[0]-x[1] < 0.2] for x in list(zip(price[:, 0], price_ph[:, 0]))
-                             if x[0] > 0.8 or x[0] < 0.2]
-            # print('predict pro of 0 / label', ['{:.2f}, {}'.format(x[0], x[1]) for x in predict_label])
-            # print('up_prob    : ', price[:, 0])
-            # print('real label : ', np.argmax(price_ph, axis=1))
-            print('loss: ', price_loss)
-            predict_label = np.array(predict_label)
-            print('High confident predict rate: {:.2f}%'.format(100 * len(predict_label) / len(price)))
-            print('High confident predict accuracy: {:.2f}%'.format(100 * np.sum(predict_label[:, 1])/len(predict_label)))
-            print('Overall accuracy: {}'.format(tf_accuracy))
+            self.price_print(price, price_ph, price_loss, tf_accuracy, 'train_', train_step)
             
     def test(self, data):
         return
@@ -156,6 +182,11 @@ class Model:
     def _create_placeholders(self):
         observations_dim = self._obs_dim
         actions_dim = self._actions_dim
+
+        self._keep_prob_ph = tf.placeholder(
+            tf.float32,
+            name='keep_prob',
+        )
         
         self._observations_ph = tf.placeholder(
             tf.float32,
@@ -248,27 +279,56 @@ class Model:
         
                     return context_vector
 
-            # context_vector = attention(_dec_in_state)
-            # x = linear([emb_dec_inputs] + [context_vector], emb_dim, True)
+            context_vector = attention(_dec_in_state)
+            x = linear([emb_dec_inputs] + [context_vector], emb_dim, True)
             # Run the decoder RNN cell. cell_output = decoder state
-            # cell_output, state = cell(x, _dec_in_state)
-            # context_vector = attention(state)
-            # with variable_scope.variable_scope("AttnOutputProjection"):
-            #     output = linear([cell_output] + [context_vector], cell.output_size, True)
+            cell_output, state = cell(x, _dec_in_state)
+            context_vector = attention(state)
+            with variable_scope.variable_scope("AttnOutputProjection"):
+                output = linear([cell_output] + [context_vector], cell.output_size, True)
             
             cell_output, state = cell(emb_dec_inputs, _dec_in_state)
             return cell_output
+    
+    def _attention(self, enc_output):
+        # enc_output: [batch_size, enc_steps, 2*hidden_dim]
+
+        with variable_scope.variable_scope("Attention"):
+            _enc_states = enc_output[:, :-1, :]     # [batch_size, enc_steps-1, 2*hidden_dim]
+            _dec_states = enc_output[:, -1, :]  # [batch_size, 2*hidden_dim]
+            attn_size = _enc_states.get_shape()[2]       # 2*hidden_dim
+            W_h = variable_scope.get_variable("W_h", [1, 1, attn_size, attn_size])
+            v = variable_scope.get_variable("v", [attn_size])
+            _enc_states = tf.expand_dims(_enc_states, axis=2)  # now is shape (batch_size, enc_steps-1, 1, attn_size)
+            encoder_features = nn_ops.conv2d(_enc_states, W_h, [1, 1, 1, 1],
+                                             "SAME")  # shape (batch_size, enc_steps-1, 1, attn_size)
+
+            decoder_features = linear(_dec_states, attn_size, True, scope='decoder_features')  # shape (batch_size, attn_size)
+            decoder_features = tf.expand_dims(tf.expand_dims(decoder_features, 1),
+                                              1)  # reshape to (batch_size, 1, 1, attn_size)
             
+            e_not_masked = math_ops.reduce_sum(v * math_ops.tanh(encoder_features + decoder_features),
+                                               [2, 3])  # calculate e, (batch_size, enc_steps-1)
+            attn_dist = nn_ops.softmax(e_not_masked)  # (batch_size, enc_steps-1)
+            context_vector = math_ops.reduce_sum(array_ops.reshape(attn_dist, [-1, self._hps.encode_step-1, 1, 1])
+                                                 * _enc_states, [1, 2])  # shape (batch_size, attn_size).
+            context_vector = array_ops.reshape(context_vector, [-1, attn_size])
+            print('_dec_states: ', _dec_states)
+            print('context_vector: ', context_vector)
+            output = linear([_dec_states] + [context_vector], attn_size, True, scope='output')
+            return output
+    
     def _hidden_state_fun(self, obs_state):
         with tf.variable_scope('hidden_state', reuse=tf.AUTO_REUSE):  # tf.AUTO_REUSE
             obs = obs_state[:, 0: self._hps.encode_dim * self._hps.encode_step]
             # state = obs_state[:, self._hps.encode_dim * self._hps.encode_step:]  # 当前的持有状态信息
             obs = tf.reshape(obs, [-1, self._hps.encode_step, self._hps.encode_dim])
             enc_output, fw_st, bw_st = self._add_encoder(obs, self._hps.encode_step)
+            output = self._attention(enc_output)
             # dec_in_state = self._reduce_states(fw_st, bw_st)
             # hidden_state = self._add_decoder(enc_output, state, dec_in_state)
         
-        return enc_output[:, -1, :]
+        return output
     
     def _policy_fun(self, hidden_states):
         with tf.variable_scope('action_output', reuse=tf.AUTO_REUSE):
@@ -291,8 +351,10 @@ class Model:
     def _build_graph(self):
         self._create_placeholders()
         hidden_states = self._hidden_state_fun(self._observations_ph)
+        hidden_states = tf.nn.dropout(hidden_states, keep_prob=self._keep_prob_ph)
         price_logits = tf.layers.dense(hidden_states, 2, activation=None, name='price_prob_output')
         price_up_down_prob = tf.nn.softmax(price_logits)
+        variable_summaries('predict', price_up_down_prob)
 
         # actions = self._policy_fun(hidden_states)
         # policy_q = self._q_function(hidden_states, actions)
@@ -306,14 +368,16 @@ class Model:
         # q_loss = tf.reduce_sum(self._rewards_ph + tf.squeeze(self._hps.gamma * next_policy_q - actions_ph_q),
         #                        axis=0, name='q_loss')
 
-        correct_prediction = tf.equal(tf.argmax(price_up_down_prob, 1), tf.argmax(self._price_up_down_prob_ph, 1))
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-        price_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self._price_up_down_prob_ph,
-                                                                               logits=price_logits))
+        correct_prediction = tf.cast(tf.equal(tf.argmax(price_up_down_prob, 1),
+                                              tf.argmax(self._price_up_down_prob_ph, 1)), tf.float32)
+        variable_summaries('accuracy', correct_prediction)
+        accuracy = tf.reduce_mean(correct_prediction)
+        price_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self._price_up_down_prob_ph,
+                                                                logits=price_logits)
+        variable_summaries('price_loss', price_loss)
+        price_loss = tf.reduce_mean(price_loss)
         
         # price_loss = tf.losses.mean_squared_error(self._price_next_day_ph, price_next_day)
-        variable_summaries('accuracy', accuracy)
-        variable_summaries('price_loss', price_loss)
         #
         # # Get update option
         # t_vars = tf.trainable_variables()
@@ -375,18 +439,20 @@ def write_info(info, file_name):
 
 
 def get_hps():
-    hps = {'enc_hidden_dim': 100,
+    hps = {'enc_hidden_dim': 10,
            'dec_hidden_dim': 100,
            'gamma': 0.99,
-           'learning_rate': 0.001,
+           'learning_rate': 0.0003,
            'batch_size': 256,
            'encode_step': 60,  # 历史数据个数
+           'keep_prob': 0.5,
            'encode_dim': 1,   # 特征个数：时间，开，收，高，低，量
            
-           'train_num': 10000,  # 训练集个数
-           'iteration': 100000,
+           'train_data_num': 100000,  # 训练集个数
+           'train_iter': 50000,    # 训练的 iterations
+           'eval_interval': 20,  # 每次测试间隔的训练次数
            
-           'exp_name': '60相对收盘价',   # 实验名称
+           'exp_name': '60相对收盘价注意力10h_dim_0.5d',   # 实验名称
            'model_dir': './model',      # 保存模型文件夹路径
            'is_retrain': False}      # 是否从头训练
     hps['train_dir'] = os.path.join(hps['model_dir'], hps['exp_name'])
@@ -410,16 +476,21 @@ def main():
     obs = env.reset()
     data_set.add_data(obs, 0, 0)
 
-    data_size = hps.train_num
+    data_size = hps.train_data_num
     for i in range(data_size):
         print('\r{}/{}'.format(i, data_size), end='')
         obs, reward, _ = env.step(obs, Actions([0.3, 0.3, 0.4]))
         data_set.add_data(obs, 0, 0)
 
-    n = hps.iteration
+    n = hps.train_iter
     for i in range(n):
         print('\n\n{}/{}'.format(i, n))
         model.price_train(1, data_set)
+        if i % hps.eval_interval == 0:
+            print('-'*50)
+            model.price_test(1, data_set)
+            print('-'*50)
+        
     return
 
 
