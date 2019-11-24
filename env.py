@@ -28,6 +28,7 @@ class Actions:
 
 class Observations:
     def __init__(self, index, is_hold, wait_time, trade_price):
+        # 历史数据从 index 开始
         # is_hold: 是否持有股票，1表示持有，0表示未持有
         # trade_price: 距离上次操作的时间（多少个5分钟）
         # trade_price: 上次交易价格
@@ -38,26 +39,23 @@ class Observations:
         self.trade_price = trade_price
     
     def values(self, history_data, length):
-        # history_data: DataFram 索引越靠前日期越靠后
-        # 返回数据为 length * 6 + 3， 前 length * 6 为每日的 time，open， close， high， low， vol/10000
+        # history_data: DataFram 索引越靠前日期越靠前
         # 其中 time 为 0 到 48， 表示一天中的第几个5分钟
         # 最后三位分别是 is_hold * 100，即100为持仓, 持仓是否过夜，100为过夜
-        feature = [[x for x in history_data.columns if x.starswith('norm')]]
-        # feature = ['open', 'high', 'low', 'close', 'vol']
-        # feature = ['trade_time', 'open', 'high', 'low', 'close', 'vol']
-        recent_data = history_data[feature][
-                      self.index: self.index + length]
+        
+        feature = [x for x in history_data.columns if x.startswith('norm')]
+        recent_data = history_data[feature][self.index: self.index + length]
         # recent_data['vol'] = recent_data['vol']/10000
         # recent_data['trade_time'] = recent_data['trade_time'].apply(lambda x: get_time(x))
         # is_pass_night = self.wait_time > 48 or self.wait_time > recent_data['trade_time'].iloc[0]
-        values = np.array(recent_data.values).reshape(1, -1)
+        values = np.array(recent_data.values)   # .reshape(1, -1)
         # print('length: ', history_data.shape[0])
         # print(self.index + length - 1)
         # print(values)
         # print('1: ', values[0][self.index])
         # print('2: ', values[0][values[0][self.index + length - 1]])
-        for i in range(0, length-1):
-            values[0][i] = 100 * (values[0][i] - values[0][i+1]) / values[0][i+1]
+        # for i in range(0, length-1):
+        #     values[0][i] = 100 * (values[0][i] - values[0][i+1]) / values[0][i+1]
             
         return values
         # return np.hstack([np.array(recent_data.values).reshape(1, -1),
@@ -101,12 +99,12 @@ def calc_reward_batch(obs, next_obs, history_data):
         return -fee
 
 
+# 可能有问题，由于数据倒序了，前面的数据日期早
 class Env:
     def __init__(self, hps, data_set):
         self._hps = hps
         self._history_data = data_set.history_data
-        index = self._history_data.shape[0] - self._hps.encode_step - 1
-        self._reset_obs = Observations(index=index, is_hold=0, wait_time=0, trade_price=0)
+        self._reset_obs = Observations(index=0, is_hold=0, wait_time=0, trade_price=0)
         
         self._observations_dim = self._reset_obs.values(data_set.history_data, hps.encode_step).shape[1]
         self._actions_dim = Actions.dim
@@ -152,11 +150,17 @@ class Env:
 
 def main():
     from data_set import DataSet
-    hps = {'encode_step': 10}     # 时间，开，收，高，低，量
+    from collections import namedtuple
+    hps = {
+        'encode_step': 5,  # 历史数据个数
+        'train_data_num': 100000,  # 训练集个数
+        }
+    
+    hps = namedtuple("HParams", hps.keys())(**hps)
     
     data_set = DataSet(hps)
     obs = Observations(0, 0, 0, 0)
-    print(obs.values(data_set.history_data, hps['encode_step']))
+    print(obs.values(data_set.history_data, hps.encode_step).shape)
     return
 
 
