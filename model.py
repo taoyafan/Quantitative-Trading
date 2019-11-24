@@ -260,9 +260,12 @@ class Model:
                                              "SAME")  # shape (batch_size, max_enc_steps, 1, attention_vec_size)
 
             def attention(decoder_state):
+                print('decoder_state: ', decoder_state)
                 with variable_scope.variable_scope("Attention"):
                     decoder_features = linear(decoder_state, attention_vec_size,
                                               True)  # shape (batch_size, attention_vec_size)
+                    print('attention_vec_size: ', attention_vec_size)
+                    print('decoder_features: ', decoder_features)
                     decoder_features = tf.expand_dims(tf.expand_dims(decoder_features, 1),
                                                       1)  # reshape to (batch_size, 1, 1, attention_vec_size)
         
@@ -287,15 +290,16 @@ class Model:
             with variable_scope.variable_scope("AttnOutputProjection"):
                 output = linear([cell_output] + [context_vector], cell.output_size, True)
             
-            cell_output, state = cell(emb_dec_inputs, _dec_in_state)
-            return cell_output
+            # cell_output, state = cell(emb_dec_inputs, _dec_in_state)
+            return output
     
-    def _attention(self, enc_output):
-        # enc_output: [batch_size, enc_steps, 2*hidden_dim]
+    def _attention(self, _enc_states, _dec_states):
+        # _enc_states: [batch_size, enc_steps, 2*hidden_dim]
+        # _dec_states: [batch_size, hidden_dim]
 
         with variable_scope.variable_scope("Attention"):
-            _enc_states = enc_output[:, :-1, :]     # [batch_size, enc_steps-1, 2*hidden_dim]
-            _dec_states = enc_output[:, -1, :]  # [batch_size, 2*hidden_dim]
+            # _enc_states = enc_output[:, :-1, :]     # [batch_size, enc_steps-1, 2*hidden_dim]
+            # _dec_states = enc_output[:, -1, :]  # [batch_size, 2*hidden_dim]
             attn_size = _enc_states.get_shape()[2]       # 2*hidden_dim
             W_h = variable_scope.get_variable("W_h", [1, 1, attn_size, attn_size])
             v = variable_scope.get_variable("v", [attn_size])
@@ -303,30 +307,30 @@ class Model:
             encoder_features = nn_ops.conv2d(_enc_states, W_h, [1, 1, 1, 1],
                                              "SAME")  # shape (batch_size, enc_steps-1, 1, attn_size)
 
-            decoder_features = linear(_dec_states, attn_size, True, scope='decoder_features')  # shape (batch_size, attn_size)
+            decoder_features = linear(_dec_states, attn_size, True,
+                                      scope='decoder_features')  # shape (batch_size, attn_size)
             decoder_features = tf.expand_dims(tf.expand_dims(decoder_features, 1),
                                               1)  # reshape to (batch_size, 1, 1, attn_size)
             
             e_not_masked = math_ops.reduce_sum(v * math_ops.tanh(encoder_features + decoder_features),
                                                [2, 3])  # calculate e, (batch_size, enc_steps-1)
             attn_dist = nn_ops.softmax(e_not_masked)  # (batch_size, enc_steps-1)
-            context_vector = math_ops.reduce_sum(array_ops.reshape(attn_dist, [-1, self._hps.encode_step-1, 1, 1])
+            context_vector = math_ops.reduce_sum(array_ops.reshape(attn_dist, [-1, self._hps.encode_step, 1, 1])
                                                  * _enc_states, [1, 2])  # shape (batch_size, attn_size).
             context_vector = array_ops.reshape(context_vector, [-1, attn_size])
-            print('_dec_states: ', _dec_states)
-            print('context_vector: ', context_vector)
+
             output = linear([_dec_states] + [context_vector], attn_size, True, scope='output')
             return output
     
     def _hidden_state_fun(self, obs_state):
         with tf.variable_scope('hidden_state', reuse=tf.AUTO_REUSE):  # tf.AUTO_REUSE
             obs = obs_state[:, 0: self._hps.encode_dim * self._hps.encode_step]
-            # state = obs_state[:, self._hps.encode_dim * self._hps.encode_step:]  # 当前的持有状态信息
+            state = obs_state[:, self._hps.encode_dim * self._hps.encode_step-1:]  # 当前的持有状态信息
             obs = tf.reshape(obs, [-1, self._hps.encode_step, self._hps.encode_dim])
             enc_output, fw_st, bw_st = self._add_encoder(obs, self._hps.encode_step)
-            output = self._attention(enc_output)
-            # dec_in_state = self._reduce_states(fw_st, bw_st)
-            # hidden_state = self._add_decoder(enc_output, state, dec_in_state)
+            dec_in_state = self._reduce_states(fw_st, bw_st)
+            # output = self._attention(enc_output, dec_in_state)
+            output = self._add_decoder(enc_output, state, dec_in_state)
         
         return output
     
@@ -449,10 +453,10 @@ def get_hps():
            'encode_dim': 1,   # 特征个数：时间，开，收，高，低，量
            
            'train_data_num': 100000,  # 训练集个数
-           'train_iter': 50000,    # 训练的 iterations
+           'train_iter': 100000,    # 训练的 iterations
            'eval_interval': 20,  # 每次测试间隔的训练次数
            
-           'exp_name': '60相对收盘价注意力10h_dim_0.5d',   # 实验名称
+           'exp_name': '60相对收盘价enc_dec_10h_dim_0.5d',   # 实验名称
            'model_dir': './model',      # 保存模型文件夹路径
            'is_retrain': False}      # 是否从头训练
     hps['train_dir'] = os.path.join(hps['model_dir'], hps['exp_name'])
