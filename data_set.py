@@ -16,7 +16,7 @@ class DataSet:
         self.data_nom()
         
         return
-    
+        
     def data_nom(self):
         # 计算均线
         self._history_data['5'] = self._history_data.close.rolling(5).mean()
@@ -50,9 +50,8 @@ class DataSet:
         self._history_data[[x for x in self._history_data.columns if x.startswith('norm')]] = \
             self._history_data[[x for x in self._history_data.columns if x.startswith('norm')]].apply(
             lambda x: (x - x[0: self._hps.train_data_num].mean()) / x[0: self._hps.train_data_num].std())
-        
         return
-
+    
     def get_batch(self, nums):
         assert self._length > 1, 'Length of data is {} which is not enough. \
         Data need at least {}'.format(self._length, 2)
@@ -73,7 +72,7 @@ class DataSet:
     def _get_obs_price(self, obs_list):
         close = np.array([self._history_data['close'].iloc[x.index] for x in obs_list])
         price_next_day = np.array([self._history_data['close'].iloc[x.index-1] for x in obs_list])
-        obs = np.vstack([x.values(self._history_data, self._hps.encode_step) for x in obs_list])
+        obs = np.stack([x.values(self._history_data, self._hps.encode_step) for x in obs_list], axis=0)
 
         # up_down_prob 第 0 位为 1 时为上涨，反之为下跌（持平）
         temp = price_next_day - close
@@ -90,8 +89,8 @@ class DataSet:
         return self._get_obs_price([self.obs_buffer[x] for x in rand_idx])
 
     def get_price_test_batch(self, nums):
-        end_id = self.history_data.shape[0] - self._hps.train_data_num - self._hps.encode_step
-        rand_idx = np.random.randint(0, end_id, nums)
+        end_id = self.history_data.shape[0] - self._hps.encode_step
+        rand_idx = np.random.randint(self._hps.train_data_num, end_id, nums)
         rand_obs = [Observations(x, 0, 0, 0) for x in rand_idx]
         return self._get_obs_price(rand_obs)
     
@@ -113,20 +112,28 @@ def main():
     pd.set_option('display.width', 1000)  # 设置字符显示宽度
     pd.set_option('display.max_columns', None)
     hps = {
-        'encode_step': 60,  # 历史数据个数
+        'encode_step': 5,  # 历史数据个数
         'train_data_num': 100000,  # 训练集个数
         }
     
     hps = namedtuple("HParams", hps.keys())(**hps)
     data_set = DataSet(hps)
-    # data_size = 100
-    # for i in range(data_size):
-    #     data_set.add_data(Observations(i, 0, 0, 0), 0, 0)
+    data_size = 100
+    for i in range(data_size):
+        data_set.add_data(Observations(i, 0, 0, 0), 0, 0)
     # print(data_set.get_price_batch(2))
     # print(data_set.get_price_test_batch(2))
-    print(data_set.history_data.head(20))
-    print(data_set.history_data.tail(20))
-    
+    # print(data_set.history_data.head(20))
+    # print(data_set.history_data.tail(20))
+    # print(data_set.get_price_batch(20)[0].shape)
+    # print(data_set.get_price_batch(10)[1])
+    data_set.get_price_test_batch(10)
+    data_set.get_price_test_batch(10)
+    data_set.get_price_test_batch(10)
+    data_set.get_price_test_batch(10)
+    data_set.get_price_test_batch(10)
+    data_set.get_price_test_batch(10)
+    data_set.get_price_test_batch(10)
     return
 
 
