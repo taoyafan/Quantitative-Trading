@@ -42,7 +42,8 @@ class Observations:
         # 返回数据为 length * 6 + 3， 前 length * 6 为每日的 time，open， close， high， low， vol/10000
         # 其中 time 为 0 到 48， 表示一天中的第几个5分钟
         # 最后三位分别是 is_hold * 100，即100为持仓, 持仓是否过夜，100为过夜
-        feature = ['close']
+        feature = [[x for x in history_data.columns if x.starswith('norm')]]
+        # feature = ['open', 'high', 'low', 'close', 'vol']
         # feature = ['trade_time', 'open', 'high', 'low', 'close', 'vol']
         recent_data = history_data[feature][
                       self.index: self.index + length]
@@ -55,8 +56,8 @@ class Observations:
         # print(values)
         # print('1: ', values[0][self.index])
         # print('2: ', values[0][values[0][self.index + length - 1]])
-        for i in range(0, length):
-            values[0][i] = 100 * (values[0][i] - values[0][length - 1]) / values[0][length - 1]
+        for i in range(0, length-1):
+            values[0][i] = 100 * (values[0][i] - values[0][i+1]) / values[0][i+1]
             
         return values
         # return np.hstack([np.array(recent_data.values).reshape(1, -1),
@@ -151,17 +152,11 @@ class Env:
 
 def main():
     from data_set import DataSet
-    hps = {'enc_hidden_dim': 100,
-           'dec_hidden_dim': 100,
-           'train_dir': './model_test',
-           'gamma': 0.99,
-           'learning_rate': 0.003,
-           'batch_size': 30,
-           'encode_step': 60,  # 200 个历史数据
-           'encode_dim': 6}     # 时间，开，收，高，低，量
+    hps = {'encode_step': 10}     # 时间，开，收，高，低，量
+    
     data_set = DataSet(hps)
     obs = Observations(0, 0, 0, 0)
-    print(obs.values(data_set.history_data, 20))
+    print(obs.values(data_set.history_data, hps['encode_step']))
     return
 
 

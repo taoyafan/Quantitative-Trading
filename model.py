@@ -450,7 +450,7 @@ def get_hps():
            'batch_size': 256,
            'encode_step': 60,  # 历史数据个数
            'keep_prob': 0.5,
-           'encode_dim': 1,   # 特征个数：时间，开，收，高，低，量
+           'encode_dim': 5,   # 特征个数：时间，开，收，高，低，量
            
            'train_data_num': 100000,  # 训练集个数
            'train_iter': 100000,    # 训练的 iterations

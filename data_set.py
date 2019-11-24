@@ -28,27 +28,27 @@ class DataSet:
         self._history_data.reset_index(drop=True, inplace=True)
         
         # open 价格相对 60 均线幅度
-        self._history_data['nom_open'] = (self._history_data['open'] - self._history_data['60']
+        self._history_data['norm_open'] = (self._history_data['open'] - self._history_data['60']
                                           ) / self._history_data['60']
 
         # low, high, close 价格相对  open
-        self._history_data[['nom_' + x for x in ['close', 'high', 'low']]] \
+        self._history_data[['norm_' + x for x in ['close', 'high', 'low']]] \
             = self._history_data[['close', 'high', 'low']].apply(lambda x: x - self._history_data['open'])
 
         # 5, 10, 30, 60 均线相对上一时刻
-        self._history_data[['nom_' + x for x in ['5', '10', '30', '60']]] \
+        self._history_data[['norm_' + x for x in ['5', '10', '30', '60']]] \
             = self._history_data[['5', '10', '30', '60']].apply(lambda x: x.diff() / x)
 
         # 交易量相对 交易量60 均线幅度
-        self._history_data['nom_vol'] = (self._history_data['vol'] - self._history_data['vol60']
+        self._history_data['norm_vol'] = (self._history_data['vol'] - self._history_data['vol60']
                                          ) / self._history_data['vol60']
-        self._history_data['nom_vol60'] = self._history_data['vol60'].diff() / self._history_data['vol60']
+        self._history_data['norm_vol60'] = self._history_data['vol60'].diff() / self._history_data['vol60']
 
         self._history_data.drop([0, 4948, 4949, 17640], inplace=True)
         self._history_data.reset_index(drop=True, inplace=True)
         
-        self._history_data[[x for x in self._history_data.columns if x.startswith('nom')]] = \
-            self._history_data[[x for x in self._history_data.columns if x.startswith('nom')]].apply(
+        self._history_data[[x for x in self._history_data.columns if x.startswith('norm')]] = \
+            self._history_data[[x for x in self._history_data.columns if x.startswith('norm')]].apply(
             lambda x: (x - x[0: self._hps.train_data_num].mean()) / x[0: self._hps.train_data_num].std())
         
         return
@@ -126,7 +126,6 @@ def main():
     # print(data_set.get_price_test_batch(2))
     print(data_set.history_data.head(20))
     print(data_set.history_data.tail(20))
-    print(data_set.history_data.nom_vol60.std())
     
     return
 
