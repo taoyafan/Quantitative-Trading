@@ -11,13 +11,48 @@ class DataSet:
         
         self._length = 0
         self._hps = hps
-        self._history_data = pd.read_csv(data_dir, index_col=0)
-
-        # max_min_scaler = lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))
-        # self._history_data[['open', 'high', 'low', 'close', 'vol']] = \
-        #     self._history_data[['open', 'high', 'low', 'close', 'vol']].apply(max_min_scaler)
+        self._history_data = pd.read_csv(data_dir, index_col=0).iloc[-1::-1, :]
+        self._history_data.reset_index(drop=True, inplace=True)
+        self.data_nom()
+        
         return
     
+    def data_nom(self):
+        # 计算均线
+        self._history_data['5'] = self._history_data.close.rolling(5).mean()
+        self._history_data['10'] = self._history_data.close.rolling(20).mean()
+        self._history_data['30'] = self._history_data.close.rolling(30).mean()
+        self._history_data['60'] = self._history_data.close.rolling(60).mean()
+        self._history_data['vol60'] = self._history_data.vol.rolling(60).mean()
+        self._history_data.drop(range(0, 59), inplace=True)
+        self._history_data.reset_index(drop=True, inplace=True)
+        
+        # open 价格相对 60 均线幅度
+        self._history_data['nom_open'] = (self._history_data['open'] - self._history_data['60']
+                                          ) / self._history_data['60']
+
+        # low, high, close 价格相对  open
+        self._history_data[['nom_' + x for x in ['close', 'high', 'low']]] \
+            = self._history_data[['close', 'high', 'low']].apply(lambda x: x - self._history_data['open'])
+
+        # 5, 10, 30, 60 均线相对上一时刻
+        self._history_data[['nom_' + x for x in ['5', '10', '30', '60']]] \
+            = self._history_data[['5', '10', '30', '60']].apply(lambda x: x.diff() / x)
+
+        # 交易量相对 交易量60 均线幅度
+        self._history_data['nom_vol'] = (self._history_data['vol'] - self._history_data['vol60']
+                                         ) / self._history_data['vol60']
+        self._history_data['nom_vol60'] = self._history_data['vol60'].diff() / self._history_data['vol60']
+
+        self._history_data.drop([0, 4948, 4949, 17640], inplace=True)
+        self._history_data.reset_index(drop=True, inplace=True)
+        
+        self._history_data[[x for x in self._history_data.columns if x.startswith('nom')]] = \
+            self._history_data[[x for x in self._history_data.columns if x.startswith('nom')]].apply(
+            lambda x: (x - x[0: self._hps.train_data_num].mean()) / x[0: self._hps.train_data_num].std())
+        
+        return
+
     def get_batch(self, nums):
         assert self._length > 1, 'Length of data is {} which is not enough. \
         Data need at least {}'.format(self._length, 2)
@@ -46,7 +81,7 @@ class DataSet:
         up_down_prob[np.where(temp > 0), 0] = 1
         up_down_prob[np.where(temp <= 0), 1] = 1
         return obs, up_down_prob
-    
+
     def get_price_batch(self, nums):
         assert 1 < self._length < self._history_data.shape[0]-49, 'Length of data is {} which is not enough. \
         Data need at least {}'.format(self._length, 2)
@@ -75,29 +110,24 @@ class DataSet:
 
 def main():
     from collections import namedtuple
-
-    hps = {'enc_hidden_dim': 100,
-           'dec_hidden_dim': 100,
-           'gamma': 0.99,
-           'learning_rate': 0.001,
-           'batch_size': 256,
-           'encode_step': 60,  # 历史数据个数
-           'encode_dim': 1,  # 特征个数：时间，开，收，高，低，量
-
-           'train_data_num': 10000,  # 训练集个数
-           'train_iter': 100000,  # 训练的 iterations
-           'eval_interval': 20,  # 每次测试间隔的训练次数
-
-           'exp_name': '60相对收盘价',  # 实验名称
-           'model_dir': './model',  # 保存模型文件夹路径
-           'is_retrain': False}  # 是否从头训练
+    pd.set_option('display.width', 1000)  # 设置字符显示宽度
+    pd.set_option('display.max_columns', None)
+    hps = {
+        'encode_step': 60,  # 历史数据个数
+        'train_data_num': 100000,  # 训练集个数
+        }
+    
     hps = namedtuple("HParams", hps.keys())(**hps)
     data_set = DataSet(hps)
-    data_size = 100
-    for i in range(data_size):
-        data_set.add_data(Observations(i, 0, 0, 0), 0, 0)
-    print(data_set.get_price_batch(2))
-    print(data_set.get_price_test_batch(2))
+    # data_size = 100
+    # for i in range(data_size):
+    #     data_set.add_data(Observations(i, 0, 0, 0), 0, 0)
+    # print(data_set.get_price_batch(2))
+    # print(data_set.get_price_test_batch(2))
+    print(data_set.history_data.head(20))
+    print(data_set.history_data.tail(20))
+    print(data_set.history_data.nom_vol60.std())
+    
     return
 
 
