@@ -119,31 +119,31 @@ class Model:
         summary.value.add(tag=prefix+'high_confident_acc', simple_value=high_confident_acc)
         summary.value.add(tag=prefix+'overall_acc', simple_value=tf_accuracy)
         self._summary_writer.add_summary(summary, step)
-        
+    
     def price_test(self, iteration, data_set):
         for i in range(iteration):
             obs_ph, price_ph = data_set.get_price_test_batch(self._hps.batch_size)
             # obs_ph = (obs_ph - 50) / 100
             # print('obs_ph\n', obs_ph)
-            to_return = [self.price_predict, self.price_loss, self.accuracy, self.global_step]
+            to_return = [self.price_predict, self.price_loss, self.accuracy, self.global_step, self.summaries]
             feed_dict = {self._observations_ph: obs_ph, self._price_up_down_prob_ph: price_ph,
                          self._keep_prob_ph: 1}
-            price, price_loss, tf_accuracy, train_step = self._sess.run(to_return, feed_dict)
+            price, price_loss, tf_accuracy, train_step, summaries = self._sess.run(to_return, feed_dict)
+            self._summary_writer.add_summary(summaries, train_step)
             self.price_print(price, price_ph, price_loss, tf_accuracy, 'test_', train_step)
-            
+    
     def price_train(self, iteration, data_set):
         for i in range(iteration):
             obs_ph, price_ph = data_set.get_price_batch(self._hps.batch_size)
             keep_prob_ph = self._hps.keep_prob
             # obs_ph = (obs_ph - 50) / 100
             # print('obs_ph\n', obs_ph)
-            to_return = [self.price_predict, self.price_loss, self.price_train_opt, self.summaries, self.global_step,
+            to_return = [self.price_predict, self.price_loss, self.price_train_opt, self.global_step,
                          self.accuracy]
             feed_dict = {self._observations_ph: obs_ph, self._price_up_down_prob_ph: price_ph,
                          self._keep_prob_ph: keep_prob_ph}
-            price, price_loss, _, summaries, train_step, tf_accuracy = self._sess.run(to_return, feed_dict)
+            price, price_loss, _, train_step, tf_accuracy = self._sess.run(to_return, feed_dict)
             
-            self._summary_writer.add_summary(summaries, train_step)
             self.price_print(price, price_ph, price_loss, tf_accuracy, 'train_', train_step)
             
     def test(self, data):
@@ -319,7 +319,7 @@ class Model:
                                                  * _enc_states, [1, 2])  # shape (batch_size, attn_size).
             context_vector = array_ops.reshape(context_vector, [-1, attn_size])
 
-            output = linear([_dec_states] + [context_vector], attn_size, True, scope='output')
+            output = linear([x for x in _dec_states] + [context_vector], attn_size, True, scope='output')
             return output
     
     def _hidden_state_fun(self, obs_state):
@@ -329,8 +329,8 @@ class Model:
             obs = tf.reshape(obs, [-1, self._hps.encode_step, self._hps.encode_dim])
             enc_output, fw_st, bw_st = self._add_encoder(obs, self._hps.encode_step)
             dec_in_state = self._reduce_states(fw_st, bw_st)
-            # output = self._attention(enc_output, dec_in_state)
-            output = self._add_decoder(enc_output, state, dec_in_state)
+            output = self._attention(enc_output, dec_in_state)
+            # output = self._add_decoder(enc_output, state, dec_in_state)
         
         return output
     
@@ -456,7 +456,7 @@ def get_hps():
            'train_iter': 100000,    # 训练的 iterations
            'eval_interval': 20,  # 每次测试间隔的训练次数
            
-           'exp_name': '60相对收盘价enc_dec_10h_dim_0.5d',   # 实验名称
+           'exp_name': '60相对收盘价new_att_10h_dim_0.5d',   # 实验名称
            'model_dir': './model',      # 保存模型文件夹路径
            'is_retrain': False}      # 是否从头训练
     hps['train_dir'] = os.path.join(hps['model_dir'], hps['exp_name'])
