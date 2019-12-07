@@ -69,6 +69,11 @@ def variable_summaries(var_name, var):
         tf.summary.scalar('max', tf.reduce_max(var))
         tf.summary.scalar('min', tf.reduce_min(var))
         tf.summary.histogram('histogram', var)
+
+
+def debug_mes_print(debug_mes):
+    for key, value in debug_mes.items():
+        print(key + ': {}'.format(value))
         
         
 class Model:
@@ -85,10 +90,14 @@ class Model:
         # self.action, self.Q, self.price_predict, self.action_loss, self.Q_loss, self.price_loss, \
         #     self.action_train_opt, self.Q_train_opt, self.price_train_opt = self._build_graph()
 
+        self.debug_mes = dict()
         self.price_predict, self.price_loss, self.accuracy, self.price_train_opt = self._build_graph()
         self.summaries = tf.summary.merge_all()
         self._sess, self._summary_writer = self._sess_setup()
         return
+    
+    def add_debug(self, name, val):
+        self.debug_mes[name] = val
     
     def policy_q_train(self, iteration, data_set):
         for i in range(iteration):
@@ -138,13 +147,19 @@ class Model:
             keep_prob_ph = self._hps.keep_prob
             # obs_ph = (obs_ph - 50) / 100
             # print('obs_ph\n', obs_ph)
-            to_return = [self.price_predict, self.price_loss, self.price_train_opt, self.global_step,
-                         self.accuracy]
+            to_return = {'price': self.price_predict,
+                         'price_loss': self.price_loss,
+                         'train_op': self.price_train_opt,
+                         'train_step': self.global_step,
+                         'accuracy': self.accuracy,
+                         'debug_mes': self.debug_mes}
             feed_dict = {self._observations_ph: obs_ph, self._price_up_down_prob_ph: price_ph,
                          self._keep_prob_ph: keep_prob_ph}
-            price, price_loss, _, train_step, tf_accuracy = self._sess.run(to_return, feed_dict)
+            results = self._sess.run(to_return, feed_dict)
             
-            self.price_print(price, price_ph, price_loss, tf_accuracy, 'train_', train_step)
+            self.price_print(results['price'], price_ph, results['price_loss'], results['accuracy'], 'train_',
+                             results['train_step'])
+            debug_mes_print(results['debug_mes'])
             
     def test(self, data):
         return
@@ -190,12 +205,12 @@ class Model:
         
         self._observations_ph = tf.placeholder(
             tf.float32,
-            shape=(None, observations_dim),
+            shape=(None, self._hps.encode_step, observations_dim),
             name='observation',
         )
         self._next_observations_ph = tf.placeholder(
             tf.float32,
-            shape=(None, observations_dim),
+            shape=(None, self._hps.encode_step, observations_dim),
             name='next_observation',
         )
         self._actions_ph = tf.placeholder(
@@ -315,6 +330,9 @@ class Model:
             e_not_masked = math_ops.reduce_sum(v * math_ops.tanh(encoder_features + decoder_features),
                                                [2, 3])  # calculate e, (batch_size, enc_steps-1)
             attn_dist = nn_ops.softmax(e_not_masked)  # (batch_size, enc_steps-1)
+            
+            # self.add_debug('attn_dist', attn_dist)
+
             context_vector = math_ops.reduce_sum(array_ops.reshape(attn_dist, [-1, self._hps.encode_step, 1, 1])
                                                  * _enc_states, [1, 2])  # shape (batch_size, attn_size).
             context_vector = array_ops.reshape(context_vector, [-1, attn_size])
@@ -324,8 +342,8 @@ class Model:
     
     def _hidden_state_fun(self, obs_state):
         with tf.variable_scope('hidden_state', reuse=tf.AUTO_REUSE):  # tf.AUTO_REUSE
-            obs = obs_state[:, 0: self._hps.encode_dim * self._hps.encode_step]
-            state = obs_state[:, self._hps.encode_dim * self._hps.encode_step-1:]  # 当前的持有状态信息
+            obs = obs_state[:, :, 0: self._hps.encode_dim]
+            state = obs_state[:, :, self._hps.encode_dim - 1:]  # 当前的持有状态信息
             obs = tf.reshape(obs, [-1, self._hps.encode_step, self._hps.encode_dim])
             enc_output, fw_st, bw_st = self._add_encoder(obs, self._hps.encode_step)
             dec_in_state = self._reduce_states(fw_st, bw_st)
@@ -354,9 +372,12 @@ class Model:
         
     def _build_graph(self):
         self._create_placeholders()
+        # self.add_debug('_observations_ph', self._observations_ph)
         hidden_states = self._hidden_state_fun(self._observations_ph)
+        # self.add_debug('hidden_states', hidden_states)
         hidden_states = tf.nn.dropout(hidden_states, keep_prob=self._keep_prob_ph)
-        price_logits = tf.layers.dense(hidden_states, 2, activation=None, name='price_prob_output')
+        price_logits = tf.layers.dense(hidden_states, 2, activation=None, name='price_prob_output') + 1e-6
+        # self.add_debug('price_logits', price_logits)
         price_up_down_prob = tf.nn.softmax(price_logits)
         variable_summaries('predict', price_up_down_prob)
 
@@ -450,22 +471,21 @@ def get_hps():
            'batch_size': 256,
            'encode_step': 60,  # 历史数据个数
            'keep_prob': 0.5,
-           'encode_dim': 5,   # 特征个数：时间，开，收，高，低，量
+           'encode_dim': 10,   # 特征个数：时间，开，收，高，低，量
            
            'train_data_num': 100000,  # 训练集个数
            'train_iter': 100000,    # 训练的 iterations
            'eval_interval': 20,  # 每次测试间隔的训练次数
            
-           'exp_name': '60相对收盘价new_att_10h_dim_0.5d',   # 实验名称
+           'exp_name': 'test',   # 实验名称
            'model_dir': './model',      # 保存模型文件夹路径
-           'is_retrain': False}      # 是否从头训练
+           'is_retrain': True}      # 是否从头训练
     hps['train_dir'] = os.path.join(hps['model_dir'], hps['exp_name'])
 
     if os.path.exists(hps['train_dir']):
         if hps['is_retrain']:
             shutil.rmtree(hps['train_dir'], True)
-    else:
-        os.makedirs(hps['train_dir'])
+    os.makedirs(hps['train_dir'])
         
     write_info(hps, os.path.join(hps['train_dir'], 'parameters.txt'))
     hps = namedtuple("HParams", hps.keys())(**hps)
