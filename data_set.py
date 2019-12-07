@@ -19,36 +19,38 @@ class DataSet:
         
     def data_nom(self):
         # 计算均线
-        self._history_data['5'] = self._history_data.close.rolling(5).mean()
-        self._history_data['10'] = self._history_data.close.rolling(20).mean()
-        self._history_data['30'] = self._history_data.close.rolling(30).mean()
-        self._history_data['60'] = self._history_data.close.rolling(60).mean()
-        self._history_data['vol60'] = self._history_data.vol.rolling(60).mean()
-        self._history_data.drop(range(0, 59), inplace=True)
-        self._history_data.reset_index(drop=True, inplace=True)
+        df = self._history_data
+        df.drop(df.loc[df['vol'] == 0].index, inplace=True)
         
-        # open 价格相对 60 均线幅度
-        self._history_data['norm_open'] = (self._history_data['open'] - self._history_data['60']
-                                          ) / self._history_data['60']
-
-        # low, high, close 价格相对  open
-        self._history_data[['norm_' + x for x in ['close', 'high', 'low']]] \
-            = self._history_data[['close', 'high', 'low']].apply(lambda x: x - self._history_data['open'])
-
-        # 5, 10, 30, 60 均线相对上一时刻
-        self._history_data[['norm_' + x for x in ['5', '10', '30', '60']]] \
-            = self._history_data[['5', '10', '30', '60']].apply(lambda x: x.diff() / x)
-
-        # 交易量相对 交易量60 均线幅度
-        self._history_data['norm_vol'] = (self._history_data['vol'] - self._history_data['vol60']
-                                         ) / self._history_data['vol60']
-        self._history_data['norm_vol60'] = self._history_data['vol60'].diff() / self._history_data['vol60']
-
-        self._history_data.drop([0, 4948, 4949, 17640], inplace=True)
-        self._history_data.reset_index(drop=True, inplace=True)
+        df['5'] = df.close.rolling(5).mean()
+        df['10'] = df.close.rolling(20).mean()
+        df['30'] = df.close.rolling(30).mean()
+        df['60'] = df.close.rolling(60).mean()
+        df['vol60'] = df.vol.rolling(60).mean()
+        df.drop(range(0, 59), inplace=True)
+        df.reset_index(drop=True, inplace=True)
         
-        self._history_data[[x for x in self._history_data.columns if x.startswith('norm')]] = \
-            self._history_data[[x for x in self._history_data.columns if x.startswith('norm')]].apply(
+        # (open - 60) / 60
+        df['norm_open'] = (df['open'] - df['60']) / df['60']
+
+        # ([low, high, close] - open) / open
+        df[['norm_' + x for x in ['close', 'high', 'low']]] = df[
+            ['close', 'high', 'low']].apply(lambda x: (x - df['open']) / df['open'])
+
+        # (5, 10, 30, 60 - 上一时刻) / 上一时刻
+        df[['norm_' + x for x in ['5', '10', '30', '60']]] = df[['5', '10', '30', '60']].apply(lambda x: x.diff() / x)
+
+        # (vol - vol60) / vol60
+        df['norm_vol'] = (df['vol'] - df['vol60']) / df['vol60']
+        
+        # (vol60 - 上一时刻) / 上一时刻
+        df['norm_vol60'] = df['vol60'].diff() / df['vol60']
+
+        df.drop(0, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        
+        df[[x for x in df.columns if x.startswith('norm')]] = \
+            df[[x for x in df.columns if x.startswith('norm')]].apply(
             lambda x: (x - x[0: self._hps.train_data_num].mean()) / x[0: self._hps.train_data_num].std())
         return
     
@@ -118,22 +120,26 @@ def main():
     
     hps = namedtuple("HParams", hps.keys())(**hps)
     data_set = DataSet(hps)
-    data_size = 100
-    for i in range(data_size):
-        data_set.add_data(Observations(i, 0, 0, 0), 0, 0)
+    # data_size = 100
+    # for i in range(data_size):
+    #     data_set.add_data(Observations(i, 0, 0, 0), 0, 0)
+
+    # data_set.add_data(Observations(18455, 0, 0, 0), 0, 0)
+    # data_set.add_data(Observations(18455, 0, 0, 0), 0, 0)
+    # data_set.add_data(Observations(18455, 0, 0, 0), 0, 0)
+    # data_set.add_data(Observations(18455, 0, 0, 0), 0, 0)
+    # data_set.add_data(Observations(18455, 0, 0, 0), 0, 0)
+
+    df = data_set._history_data
     # print(data_set.get_price_batch(2))
     # print(data_set.get_price_test_batch(2))
-    # print(data_set.history_data.head(20))
-    # print(data_set.history_data.tail(20))
+    print(df.head(20))
+    print(df.tail(20))
     # print(data_set.get_price_batch(20)[0].shape)
     # print(data_set.get_price_batch(10)[1])
-    data_set.get_price_test_batch(10)
-    data_set.get_price_test_batch(10)
-    data_set.get_price_test_batch(10)
-    data_set.get_price_test_batch(10)
-    data_set.get_price_test_batch(10)
-    data_set.get_price_test_batch(10)
-    data_set.get_price_test_batch(10)
+
+    print(df.isnull().any())
+
     return
 
 
