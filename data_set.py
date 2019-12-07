@@ -21,6 +21,7 @@ class DataSet:
         # 计算均线
         df = self._history_data
         df.drop(df.loc[df['vol'] == 0].index, inplace=True)
+        df['up_p'] = 0.5
         
         df['5'] = df.close.rolling(5).mean()
         df['10'] = df.close.rolling(20).mean()
@@ -72,8 +73,9 @@ class DataSet:
         return obs, next_obs, rewards, actions
     
     def _get_obs_price(self, obs_list):
-        close = np.array([self._history_data['close'].iloc[x.index] for x in obs_list])
-        price_next_day = np.array([self._history_data['close'].iloc[x.index-1] for x in obs_list])
+        length = self._hps.encode_step
+        close = np.array([self._history_data['close'].iloc[x.index+length-1] for x in obs_list])
+        price_next_day = np.array([self._history_data['close'].iloc[x.index+length] for x in obs_list])
         obs = np.stack([x.values(self._history_data, self._hps.encode_step) for x in obs_list], axis=0)
 
         # up_down_prob 第 0 位为 1 时为上涨，反之为下跌（持平）
