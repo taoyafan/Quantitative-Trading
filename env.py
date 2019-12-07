@@ -117,7 +117,7 @@ class Env:
         # 输入为 Observations 类和 Actions 类
         # 返回值为 next observations， reward， done
         index, is_hold, wait_time, trade_price = obs.index, obs.is_hold, obs.wait_time, obs.trade_price
-        done = True if index == 0 else False
+        done = True if index == self._hps.train_data_num-1 else False
         action_choose = action.choose()
         
         if is_hold == 1 and action_choose == 'sell':
@@ -136,7 +136,7 @@ class Env:
         else:
             pass  # 不做操作
         
-        next_obs = Observations(index - 1, is_hold, wait_time + 1, trade_price)
+        next_obs = Observations(index + 1, is_hold, wait_time + 1, trade_price)
         return next_obs, calc_reward_batch(obs, next_obs, self._history_data), done
     
     @property
