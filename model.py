@@ -132,7 +132,6 @@ class Model:
     def price_test(self, iteration, data_set):
         for i in range(iteration):
             obs_ph, price_ph = data_set.get_price_test_batch(self._hps.batch_size)
-            # obs_ph = (obs_ph - 50) / 100
             # print('obs_ph\n', obs_ph)
             to_return = [self.price_predict, self.price_loss, self.accuracy, self.global_step, self.summaries]
             feed_dict = {self._observations_ph: obs_ph, self._price_up_down_prob_ph: price_ph,
@@ -141,6 +140,20 @@ class Model:
             self._summary_writer.add_summary(summaries, train_step)
             self.price_print(price, price_ph, price_loss, tf_accuracy, 'test_', train_step)
     
+    def get_up_prob(self, obs_ph):
+        dim = 0
+        if obs_ph.ndim == 2:
+            dim = 1
+            obs_ph = np.expand_dims(obs_ph, axis=0)
+
+        # print('obs_ph:\n', obs_ph)
+        
+        feed_dict = {self._observations_ph: obs_ph,
+                     self._keep_prob_ph: 1}
+        price_predict = self._sess.run(self.price_predict, feed_dict)
+        
+        return price_predict[0] if dim == 1 else price_predict
+        
     def price_train(self, iteration, data_set):
         for i in range(iteration):
             obs_ph, price_ph = data_set.get_price_batch(self._hps.batch_size)
@@ -185,7 +198,7 @@ class Model:
                                  saver=saver,
                                  summary_op=None,
                                  save_summaries_secs=60,  # save summaries for tensorboard every 60 secs
-                                 save_model_secs=600,  # checkpoint every 600 secs
+                                 save_model_secs=60,  # checkpoint every 600 secs
                                  global_step=self.global_step,
                                  init_feed_dict=None
                                  )
@@ -376,7 +389,7 @@ class Model:
         hidden_states = self._hidden_state_fun(self._observations_ph)
         # self.add_debug('hidden_states', hidden_states)
         hidden_states = tf.nn.dropout(hidden_states, keep_prob=self._keep_prob_ph)
-        price_logits = tf.layers.dense(hidden_states, 2, activation=None, name='price_prob_output') + 1e-6
+        price_logits = tf.layers.dense(hidden_states, 2, activation=None, name='price_prob_output')
         # self.add_debug('price_logits', price_logits)
         price_up_down_prob = tf.nn.softmax(price_logits)
         variable_summaries('predict', price_up_down_prob)
@@ -485,7 +498,8 @@ def get_hps():
     if os.path.exists(hps['train_dir']):
         if hps['is_retrain']:
             shutil.rmtree(hps['train_dir'], True)
-    os.makedirs(hps['train_dir'])
+    else:
+        os.makedirs(hps['train_dir'])
         
     write_info(hps, os.path.join(hps['train_dir'], 'parameters.txt'))
     hps = namedtuple("HParams", hps.keys())(**hps)
